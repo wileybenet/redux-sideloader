@@ -1,14 +1,12 @@
 import { values, isUndefined, isArray, pick } from 'lodash';
 import { createSelector } from 'reselect';
 
-import store from '../../services/store';
 import ModelReducers from './reducers';
 import { pk } from './utils';
 
 class ModelHydrationSet {
-  constructor(models, Model) {
+  constructor(models, Model = null, state = null) {
     if (Model) {
-      const state = store.getState();
       const hydratedRelationsByField = Object.entries(Model.relations).reduce((memo, [field, Relation]) => ({
         ...memo,
         [field]: Relation.hydrate(Relation.selector(state).models),
@@ -58,7 +56,7 @@ export default class ModelSelectors extends ModelReducers {
     return this.hydrate(this.selector(state).models);
   }
   static hydrate(models) {
-    return new ModelHydrationSet(models, this);
+    return new ModelHydrationSet(models, this, this.getStoreState());
   }
   constructor(modelHydration, hydratedRelationsByField) {
     super(modelHydration);

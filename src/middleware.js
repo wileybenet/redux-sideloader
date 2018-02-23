@@ -1,16 +1,14 @@
 import { flatten } from 'lodash';
-import { api } from '../../services/http';
-import { getModel } from './base';
 
 export const MODEL_REQUEST = '@@MODEL_REQUEST';
 
-const getModels = chain => {
+const getModels = (modelCache, chain) => {
   if (chain.match(/\./)) {
     const chainedModels = chain.split(/\./g);
     const base = chainedModels.shift();
-    return [getModel(base)].concat(getModels(chainedModels.join('.')));
+    return [modelCache.getModel(base)].concat(getModels(modelCache, chainedModels.join('.')));
   }
-  return getModel(chain);
+  return modelCache.getModel(chain);
 };
 
 export default store => next => action => {
@@ -35,7 +33,7 @@ export default store => next => action => {
 
   const includeArray = [].concat(include);
 
-  const includedModels = flatten(includeArray.map(getModels));
+  const includedModels = flatten(includeArray.map(includeChain => getModels(model.modelCache, includeChain)));
 
   const params = {
     include: includeArray,
@@ -48,7 +46,7 @@ export default store => next => action => {
     primaryKey,
   });
 
-  return api.get(endpoint, { params })
+  return model.api.get(endpoint, { params })
     .then(({ data }) => fetchedModels.map(Model => next({
       type: Model[responseTypeKey],
       data: data[Model.modelNamePlural],

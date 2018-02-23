@@ -1,13 +1,15 @@
-const models = {};
-
-export const getModel = name => {
-  if (models[name]) {
-    return models[name];
+export class ModelCache {
+  constructor(models = []) {
+    this.models = {};
   }
-  throw new Error(`'${name}' is not a valid model name`);
-};
-
-export const cacheModel = Model => {
-  models[Model.name] = Model;
-  models[Model.modelNamePlural] = Model;
-};
+  cacheModel(Model) {
+    this.models[Model.name] = Model;
+    this.models[Model.modelNamePlural] = Model;
+  }
+  getModel(name) {
+    if (this.models[name]) {
+      return this.models[name];
+    }
+    throw new Error(`'${name}' is not a valid model name`);
+  }
+}
