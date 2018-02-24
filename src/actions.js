@@ -1,4 +1,4 @@
-import { InheritedFields } from './utils';
+import { pk, InheritedFields } from './utils';
 import { MODEL_REQUEST } from './middleware';
 
 class ModelActions extends InheritedFields {
@@ -51,6 +51,15 @@ class ModelActions extends InheritedFields {
         include: options.include,
       },
     };
+  }
+
+  change(field) {
+    return ({ target: { value } }) => this.class.store.dispatch({
+      type: this.class.UPDATE_ONE,
+      primaryKey: pk(this),
+      field,
+      value,
+    });
   }
 }
 

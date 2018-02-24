@@ -1,7 +1,7 @@
 import { camelCase } from 'lodash';
 import pluralize from 'pluralize';
 
-import { pk } from './utils';
+import { pk, assert } from './utils';
 import ModelActions from './actions';
 
 const updateByPrimaryKey = (state, modelSet) => {
@@ -89,6 +89,7 @@ class StaticModel extends ModelActions {
       case this.UPDATE_ONE:
       case this.SAVE_ONE:
       case this.ERROR_ONE:
+        assert(action.primaryKey, '`primaryKey` required in action', action);
         return {
           ...state,
           [action.primaryKey]: this.modelInstanceReducer(state[action.primaryKey], action),
