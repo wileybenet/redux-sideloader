@@ -36,6 +36,7 @@ export const initialize = api => (...models) => {
   models.forEach(Model => {
     Model.initialize(modelCache, api);
   });
+  invokeMap(models, 'buildRelations');
   const attachStore = store => invokeMap(models, 'attachStore', store);
   const reducers = {
     entities: combineReducers(models.reduce((rootReducer, model) => ({
@@ -51,3 +52,13 @@ export const initialize = api => (...models) => {
 }
 
 export { modelMiddleware };
+
+export const field = {
+  text: () => ({}),
+  shape: () => ({}),
+  relation: (modelName, { inverse = null } = {}) => ({
+    type: 'relation',
+    modelName,
+    inverse,
+  }),
+};

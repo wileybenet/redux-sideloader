@@ -1,23 +1,70 @@
-import { isUndefined, isArray, pick } from 'lodash';
-import { createSelector } from 'reselect';
+import { isArray, pick } from 'lodash';
 
 import ModelReducers from './reducers';
 import { pk } from './utils';
 
+const getRelations = (Model, relations = []) => {
+  return relations.concat(Model.relations.reduce((memo, [field, Relation]) => memo.concat(getRelations(Relation, relations)), []));
+};
+
+class HydrationCache {
+  constructor() {
+    this.cache = {};
+  }
+  get(Model, primaryKey) {
+    if (this.cache[Model.modelName]) {
+      return this.cache[Model.modelName][primaryKey];
+    }
+    return null;
+  }
+  set(Model, instance) {
+    this.cache[Model.modelName] = this.cache[Model.modelName] || {};
+    this.cache[Model.modelName][pk(instance)] = instance;
+  }
+}
+
+/**
+ * Use the static selector for a model to pass hydrated model instances to a display component
+ * state =>
+ *   filtered to relevant models =>
+ *     iterate through relations =>
+ *       recursively hydrate relevant relations
+ * @class
+ */
 class ModelHydrationSet {
-  constructor(models, Model = null, entityStates = null) {
+  constructor(models, Model = null, state = null, hydrationCache = null) {
     if (Model) {
-      const hydratedRelationsByField = Object.entries(Model.relations).reduce((memo, [field, Relation]) => ({
-        ...memo,
-        [field]: Relation.memoizedHydratingSelector({ entities: entityStates }),
-      }), {});
-      this.hydratedModels = Object.entries(models).reduce((modelSet, [, model]) => ({
-        ...modelSet,
-        [pk(model)]: new Model(model, hydratedRelationsByField),
-      }), {});
+      if (!hydrationCache) {
+        hydrationCache = new HydrationCache();
+      }
+      this.hydratedModels = Object.entries(models)
+        .map(([primaryKey, model]) => {
+          const cachedHydration = hydrationCache.get(Model, primaryKey);
+          if (cachedHydration) {
+            return cachedHydration;
+          }
+          const instance = new Model(model);
+          hydrationCache.set(Model, instance);
+          Model.relations.forEach(([key, Relation]) => {
+            if (instance.hasOwnProperty(key)) {
+              instance[key] = Relation.hydratingSelector(state, instance[key], hydrationCache);
+            }
+          });
+          return instance;
+        })
+        .reduce((hydratedModels, instance) => ({
+          ...hydratedModels,
+          [pk(instance)]: instance,
+        }), {});
     } else {
       this.hydratedModels = models;
     }
+  }
+  get all() {
+    return Object.entries(this.hydratedModels).map(([, model]) => model);
+  }
+  get length() {
+    return Object.keys(this.hydratedModels).length;
   }
   get(primaryKey) {
     return this.hydratedModels[primaryKey];
@@ -29,59 +76,55 @@ class ModelHydrationSet {
     return this.all.map(...args);
   }
   reduce(...args) {
-    return this.all.map(...args);
-  }
-  get all() {
-    return Object.entries(this.hydratedModels).map(([, model]) => model);
-  }
-  get length() {
-    return Object.keys(this.hydratedModels).length;
+    return this.all.reduce(...args);
   }
 }
 
 export default class ModelSelectors extends ModelReducers {
-  static relations = {}
+  static fields = {}
+  static getModel(modelName) {
+    return this.modelCache.getModel(modelName);
+  }
   static selector(state) {
     return state.entities
       ? state.entities[this.modelNamePlural]
       : state[this.modelNamePlural];
   }
-  static entities(state) {
-    return state.entities;
+  static buildRelations() {
+    const relations = Object.entries(this.fields)
+      .filter(([field, config]) => config.type === 'relation')
+      .map(([field, config = {}]) => {
+        const Relation = this.getModel(config.modelName);
+        if (config.inverse) {
+          Relation.importRelation(this, config.inverse);
+        }
+        return [field, Relation];
+      })
+      .concat(this.foreignRelations || []);
+    this.relations = (this.relations || []).concat(relations);
   }
-  static getRelationModels() {
-    return Object.entries(this.relations);
+  static importRelation(Relation, field) {
+    this.relations = this.relations || [];
+    this.relations.push([
+      field,
+      Relation,
+    ]);
   }
   static attachStore(store) {
     this.store = store;
   }
-  // memoizing a static method using a getter
-  static get memoizedHydratingSelector() {
-    if (!this._memoizedHydratingSelector) {
-      this._memoizedHydratingSelector = createSelector(
-        this.selector.bind(this),
-        this.entities, // TODO should walk foreign key tree and only watch related entities
-        (modelState, entityStates) => this.hydrate(modelState.models, entityStates)
-      );
+  // TODO memoize at some point
+  static hydratingSelector(state, primaryKeys = null, hydrationCache = null) {
+    const models = primaryKeys
+      ? pick(this.selector(state).models, primaryKeys)
+      : this.selector(state).models;
+    const hydration = this.hydrate(models, state, hydrationCache);
+    if (!primaryKeys || isArray(primaryKeys)) {
+      return hydration;
     }
-    return this._memoizedHydratingSelector;
+    return hydration.get(primaryKeys);
   }
-  static hydratingSelector(state) {
-    return this.hydrate(this.selector(state).models, state.entities);
-  }
-  static hydrate(models, entityStates) {
-    return new ModelHydrationSet(models, this, entityStates);
-  }
-  constructor(modelHydration, hydratedRelationsByField) {
-    super(modelHydration);
-    Object.keys(this.class.relations)
-      .filter(field => hydratedRelationsByField[field])
-      .forEach(field => {
-        if (isArray(this[field])) {
-          this[field] = hydratedRelationsByField[field].filter(this[field]);
-        } else if (!isUndefined(this[field])) {
-          this[field] = hydratedRelationsByField[field].get(this[field]);
-        }
-      });
+  static hydrate(models, state, hydrationCache) {
+    return new ModelHydrationSet(models, this, state, hydrationCache);
   }
 }

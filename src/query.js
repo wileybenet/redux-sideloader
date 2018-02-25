@@ -7,14 +7,17 @@ const Loading = ({ msg }) => (
 
 export default (Model) => {
   class Query extends React.Component {
+    static defaultProps = {
+      isReady: true,
+    }
     componentDidMount() {
       this.props.loadModel();
     }
     render() {
-      if (this.props.isLoading) {
-        return <Loading msg={`Loading ${this.props.primaryKey ? Model.modelName : Model.modelNamePlural}...`} />;
+      if (this.props.nonBlocking || (!this.props.isLoading && this.props.isReady)) {
+        return this.props.children;
       }
-      return this.props.children;
+      return <Loading msg={`Loading ${this.props.primaryKey ? Model.modelName : Model.modelNamePlural}...`} />;
     }
   }
 
@@ -37,5 +40,7 @@ export default (Model) => {
     }
   });
 
-  return connect(null, mapDispatchToProps, mergeProps)(Query);
+  const ConnectComponent = connect(null, mapDispatchToProps, mergeProps)(Query);
+  ConnectComponent.isQuery = true;
+  return ConnectComponent;
 }
