@@ -4,29 +4,6 @@ import pluralize from 'pluralize';
 import { pk, assert } from './utils';
 import ModelActions from './actions';
 
-const updateByPrimaryKey = (state, modelSet) => {
-  const modelSetArray = [].concat(modelSet);
-  if (modelSetArray.length) {
-    if (!pk(modelSetArray[0])) {
-      throw new Error('modelSet is missing `primaryKey` property');
-    }
-    return modelSetArray.reduce((newState, model) => {
-      const primaryKey = pk(model);
-      return {
-        ...newState,
-        [primaryKey]: {
-          ...state[primaryKey],
-          ...model,
-          isFetching: false,
-        },
-      };
-    }, {
-      ...state,
-    });
-  }
-  return state;
-};
-
 const defaultRecordState = {
   models: {},
   isLoading: false,
@@ -41,6 +18,9 @@ class StaticModel extends ModelActions {
   }
   static get modelNamePlural() {
     return pluralize(this.modelName);
+  }
+  static get existingPrimaryKeys() {
+    return Object.keys(this.selector(this.store.getState()).models);
   }
   static reducer(state = defaultRecordState, action) {
     switch (action.type) {
@@ -70,6 +50,7 @@ class StaticModel extends ModelActions {
           ...state,
           isStale: true,
         };
+      case this.CREATE_ONE:
       case this.UPDATE_ONE:
       case this.SAVE_ONE:
       case this.DELETE_ONE:
@@ -85,7 +66,11 @@ class StaticModel extends ModelActions {
   static modelSetReducer(state = {}, action) {
     switch (action.type) {
       case this.RECEIVE:
-        return updateByPrimaryKey(state, action.data);
+        return {
+          ...state,
+          ...this.modelGroupReducer(state, action),
+        };
+      case this.CREATE_ONE:
       case this.UPDATE_ONE:
       case this.SAVE_ONE:
       case this.ERROR_ONE:
@@ -98,20 +83,46 @@ class StaticModel extends ModelActions {
         return state;
     }
   }
+  static modelGroupReducer(state = {}, action) {
+    const modelSetArray = [].concat(action.data);
+    if (modelSetArray.length) {
+      return modelSetArray.reduce((newState, model) => {
+        const primaryKey = model[this.primaryKey];
+        return {
+          ...newState,
+          [primaryKey]: {
+            ...state[primaryKey],
+            ...model,
+            isPersisted: true,
+            isFetching: false,
+            isSaved: true,
+            isSaving: false,
+          },
+        };
+      }, {});
+    }
+    return state;
+  }
   static modelInstanceReducer(state = {}, action) {
     switch (action.type) {
+      case this.CREATE_ONE:
+        return {
+          ...this.defaultFields(),
+          ...action.data,
+          isPersisted: false,
+          isSaved: false,
+        };
       case this.UPDATE_ONE:
         return {
           ...state,
           [action.field]: action.value,
           isSaved: false,
         };
-      // case this.SAVE_ONE:
-      //   return {
-      //     ...state,
-      //     [action.field]: action.value,
-      //     isSaved: true,
-      //   };
+      case this.SAVE_ONE:
+        return {
+          ...state,
+          isSaving: true,
+        };
       case this.ERROR_ONE:
         return {
           ...state,

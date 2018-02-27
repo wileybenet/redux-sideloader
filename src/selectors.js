@@ -1,11 +1,17 @@
-import { isArray, pick } from 'lodash';
+import _, { isFunction, isArray, pick, omit } from 'lodash';
 
 import ModelReducers from './reducers';
-import { pk } from './utils';
+import { pk, InheritedFields } from './utils';
 
-const getRelations = (Model, relations = []) => {
-  return relations.concat(Model.relations.reduce((memo, [field, Relation]) => memo.concat(getRelations(Relation, relations)), []));
-};
+const getDefault = (dflt, nullDefault = null) => {
+  if (dflt === null) {
+    return nullDefault;
+  }
+  if (isFunction(dflt)) {
+    return dflt();
+  }
+  return dflt;
+}
 
 class HydrationCache {
   constructor() {
@@ -31,8 +37,10 @@ class HydrationCache {
  *       recursively hydrate relevant relations
  * @class
  */
-class ModelHydrationSet {
-  constructor(models, Model = null, state = null, hydrationCache = null) {
+class ModelHydrationSet extends InheritedFields {
+  constructor(models, meta, Model = null, state = null, hydrationCache = null) {
+    super(meta);
+
     if (Model) {
       if (!hydrationCache) {
         hydrationCache = new HydrationCache();
@@ -70,7 +78,7 @@ class ModelHydrationSet {
     return this.hydratedModels[primaryKey];
   }
   filter(primaryKeys) {
-    return new ModelHydrationSet(pick(this.hydratedModels, primaryKeys));
+    return new ModelHydrationSet(pick(this.hydratedModels, primaryKeys), this._hydration);
   }
   map(...args) {
     return this.all.map(...args);
@@ -82,6 +90,12 @@ class ModelHydrationSet {
 
 export default class ModelSelectors extends ModelReducers {
   static fields = {}
+  static defaultFields(nullDefault = null) {
+    return _(this.fields).map(({ dflt }, key) => [
+      key,
+      getDefault(dflt, nullDefault),
+    ]).fromPairs().value();
+  }
   static getModel(modelName) {
     return this.modelCache.getModel(modelName);
   }
@@ -115,16 +129,21 @@ export default class ModelSelectors extends ModelReducers {
   }
   // TODO memoize at some point
   static hydratingSelector(state, primaryKeys = null, hydrationCache = null) {
+    const meta = this.selector(state);
     const models = primaryKeys
-      ? pick(this.selector(state).models, primaryKeys)
-      : this.selector(state).models;
-    const hydration = this.hydrate(models, state, hydrationCache);
+      ? pick(meta.models, primaryKeys)
+      : meta.models;
+    const hydration = this.hydrate(omit(meta, 'models'), models, state, hydrationCache);
     if (!primaryKeys || isArray(primaryKeys)) {
       return hydration;
     }
     return hydration.get(primaryKeys);
   }
-  static hydrate(models, state, hydrationCache) {
-    return new ModelHydrationSet(models, this, state, hydrationCache);
+  static hydrate(meta, models, state, hydrationCache) {
+    return new ModelHydrationSet(models, meta, this, state, hydrationCache);
+  }
+  constructor(...args) {
+    super(...args);
+    this._state = args[0];
   }
 }

@@ -1,6 +1,9 @@
-import { flatten } from 'lodash';
+import _ from 'lodash';
+
+import { DEVELOPMENT } from './config';
 
 export const MODEL_REQUEST = '@@MODEL_REQUEST';
+export const MODEL_PERSIST = '@@MODEL_PERSIST';
 
 const getModels = (modelCache, chain) => {
   if (chain.match(/\./)) {
@@ -11,57 +14,79 @@ const getModels = (modelCache, chain) => {
   return modelCache.getModel(chain);
 };
 
-export default store => next => action => {
-  if (action.type !== MODEL_REQUEST) {
-    return next(action);
-  }
-
+const prepare = method => (next, action) => {
   const {
     model,
     requestType,
     responseTypeKey,
     errorType,
-    context: {
-      primaryKey = null,
-      include = [],
-    } = {},
+    context = {},
   } = action;
 
-  const endpoint = primaryKey
-    ? `${model.modelNamePlural}/${primaryKey}`
-    : `${model.modelNamePlural}`;
+  const fetchedModels = [model];
 
-  const includeArray = [].concat(include);
+  const params = {};
 
-  const includedModels = flatten(includeArray.map(includeChain => getModels(model.modelCache, includeChain)));
-
-  const params = {
-    include: includeArray,
-  };
-
-  const fetchedModels = [...includedModels, model];
+  if (context.include) {
+    const includeArray = [].concat(context.include);
+    _(includeArray)
+      .map(includeChain => getModels(model.modelCache, includeChain))
+      .flatten()
+      .forEach(m => fetchedModels.unshift(m));
+    params.include = includeArray;
+  }
 
   next({
     type: requestType,
-    primaryKey,
+    primaryKey: context.primaryKey,
   });
 
-  return model.api.get(endpoint, { params })
-    .then(({ data }) => fetchedModels.map(Model => next({
-      type: Model[responseTypeKey],
-      data: data[Model.modelNamePlural],
-      receivedAt: Date.now(),
-      isStale: Boolean(primaryKey),
-    })))
-    .catch(err => {
-      if (err.stack) {
-        throw err;
-      }
-      const { response: { data } } = err;
+  return method(model, requestType, context, { params })
+    .then(({ data }) => fetchedModels.map(Model => {
       return next({
-        type: errorType,
-        errors: data.errors,
+        type: Model[responseTypeKey],
+        data: data[Model.modelNamePlural] || [],
         receivedAt: Date.now(),
+        isStale: Boolean(context.primaryKey),
       });
+    }))
+    .catch(err => {
+      if (err.response) {
+        const { response: { data } } = err;
+        if (DEVELOPMENT) {
+          console.log(JSON.stringify(data, null, 2));
+        }
+        return next({
+          type: errorType,
+          errors: data.errors,
+          receivedAt: Date.now(),
+        });
+      }
+      throw err;
     });
+}
+
+const request = prepare((model, requestType, context, params) => {
+  const endpoint = context.primaryKey
+    ? `${model.modelNamePlural}/${context.primaryKey}`
+    : `${model.modelNamePlural}`;
+  return model.api.get(endpoint, params);
+});
+
+const persist = prepare((model, requestType, context) => {
+  if (context.isPersisted) {
+    return model.api.put(`${model.modelNamePlural}/${context.primaryKey}`, context.body);
+  }
+  return model.api.post(`${model.modelNamePlural}`, context.body);
+});
+
+export default store => next => action => {
+  switch (action.type) {
+    case MODEL_REQUEST:
+      return request(next, action);
+    case MODEL_PERSIST:
+      return persist(next, action);
+    default:
+      return next(action);
+  }
 };

@@ -4,6 +4,7 @@ import { ModelCache } from './base';
 import ModelSelectors from './selectors';
 import modelMiddleware from './middleware';
 import Query from './query';
+import Form from './form';
 
 
 /**
@@ -18,8 +19,10 @@ export class Model extends ModelSelectors {
     this.modelCache = modelCache;
     this.api = api;
     this.Query = Query(this);
+    this.Form = Form(this);
 
     modelCache.cacheModel(this);
+    this.bindActions();
   }
 }
 
@@ -54,11 +57,19 @@ export const initialize = api => (...models) => {
 export { modelMiddleware };
 
 export const field = {
-  text: () => ({}),
-  shape: () => ({}),
-  relation: (modelName, { inverse = null } = {}) => ({
+  string: () => ({
+    dflt: null,
+  }),
+  number: () => ({
+    dflt: null,
+  }),
+  shape: () => ({
+    dflt: null,
+  }),
+  relation: (modelName, { inverse = null, hasOne = null } = {}) => ({
     type: 'relation',
     modelName,
     inverse,
+    dflt: hasOne ? null : [],
   }),
 };
