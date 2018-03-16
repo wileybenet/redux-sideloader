@@ -1,7 +1,7 @@
 import { camelCase } from 'lodash';
 import pluralize from 'pluralize';
 
-import { pk, assert } from './utils';
+import { assert } from './utils';
 import ModelActions from './actions';
 
 const defaultRecordState = {
@@ -12,7 +12,7 @@ const defaultRecordState = {
   errors: null,
 };
 
-class StaticModel extends ModelActions {
+class ModelReducers extends ModelActions {
   static get modelName() {
     return camelCase(this.className);
   }
@@ -134,4 +134,4 @@ class StaticModel extends ModelActions {
   }
 }
 
-export default StaticModel;
+export default ModelReducers;

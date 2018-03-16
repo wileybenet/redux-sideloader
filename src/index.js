@@ -1,30 +1,9 @@
 import { invokeMap } from 'lodash';
 import { combineReducers } from 'redux';
 import { ModelCache } from './base';
-import ModelSelectors from './selectors';
-import modelMiddleware from './middleware';
-import Query from './query';
-import Form from './form';
-
-
-/**
- * Base Model class
- * Derive specific data modals from Model to simplify fetching, storing, caching, creating,
- * updating, and deleting
- * Define relations using the static relations prop to enable automatic model tree hydration
- * @class
- */
-export class Model extends ModelSelectors {
-  static initialize(modelCache, api) {
-    this.modelCache = modelCache;
-    this.api = api;
-    this.Query = Query(this);
-    this.Form = Form(this);
-
-    modelCache.cacheModel(this);
-    this.bindActions();
-  }
-}
+import Model from './model';
+import buildMiddleware from './middleware';
+import { Query, queryReducer, q } from './query';
 
 /**
  * Intialize all models and register them in the cache
@@ -37,7 +16,7 @@ export class Model extends ModelSelectors {
 export const initialize = api => (...models) => {
   const modelCache = new ModelCache();
   models.forEach(Model => {
-    Model.initialize(modelCache, api);
+    Model.initialize(modelCache);
   });
   invokeMap(models, 'buildRelations');
   const attachStore = store => invokeMap(models, 'attachStore', store);
@@ -45,16 +24,24 @@ export const initialize = api => (...models) => {
     entities: combineReducers(models.reduce((rootReducer, model) => ({
       ...rootReducer,
       [model.modelNamePlural]: model.reducer.bind(model),
-    }), {})),
+    }), {
+      $queries: queryReducer,
+    })),
   };
+  const modelMiddleware = buildMiddleware(api);
   return {
     modelCache,
     reducers,
     attachStore,
+    modelMiddleware,
   };
 }
 
-export { modelMiddleware };
+export {
+  Query,
+  Model,
+  q,
+};
 
 export const field = {
   string: () => ({

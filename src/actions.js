@@ -1,30 +1,25 @@
 import { omit } from 'lodash';
-import { assert, pk, pkProtectedRandom, InheritedFields } from './utils';
-import { MODEL_REQUEST, MODEL_PERSIST } from './middleware';
+import { assert, pkProtectedRandom, InheritedFields } from './utils';
+
+export const MODEL_QUERY = '@@MODEL_QUERY';
+export const MODEL_PERSIST = '@@MODEL_PERSIST';
+
+export const UPDATE_QUERY_CACHE = 'UPDATE_QUERY_CACHE';
+export const INVALIDATE_QUERY_CACHE = 'INVALIDATE_QUERY_CACHE';
 
 class ModelActions extends InheritedFields {
   static primaryKey = 'id';
   get primaryKeyValue() {
     return this[this.class.primaryKey];
   }
-
   static get TYPE() {
     return this.className.toUpperCase();
-  }
-  static get FETCH() {
-    return `${this.TYPE}_FETCH`;
   }
   static get RECEIVE() {
     return `${this.TYPE}_RECEIVE`;
   }
   static get ERROR() {
     return `${this.TYPE}_ERROR`;
-  }
-  static get INVALIDATE() {
-    return `${this.TYPE}_INVALIDATE`;
-  }
-  static get FETCH_ONE() {
-    return `${this.TYPE}_FETCH_ONE`;
   }
   static get RECEIVE_ONE() {
     return `${this.TYPE}_RECEIVE_ONE`;
@@ -34,9 +29,6 @@ class ModelActions extends InheritedFields {
   }
   static get UPDATE_ONE() {
     return `${this.TYPE}_UPDATE_ONE`;
-  }
-  static get SAVE_ONE() {
-    return `${this.TYPE}_SAVE_ONE`;
   }
   static get DELETE_ONE() {
     return `${this.TYPE}_DELETE_ONE`;
@@ -54,7 +46,7 @@ class ModelActions extends InheritedFields {
 
   static fetch(options = {}) {
     return {
-      type: MODEL_REQUEST,
+      type: MODEL_QUERY,
       model: this,
       requestType: this.FETCH,
       responseTypeKey: 'RECEIVE',

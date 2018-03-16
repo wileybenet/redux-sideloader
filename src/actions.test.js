@@ -10,8 +10,8 @@ describe('actions', () => {
   });
 
   test('base actions', () => {
-    expect(Toy.FETCH).toBe('FETCH_TOY');
-    expect(Toy.RECEIVE).toBe('RECEIVE_TOY');
-    expect(Toy.ERROR).toBe('ERROR_TOY');
+    expect(Toy.RECEIVE).toBe('TOY_RECEIVE');
+    expect(Toy.RECEIVE_ONE).toBe('TOY_RECEIVE_ONE');
+    expect(Toy.ERROR).toBe('TOY_ERROR');
   });
 });
